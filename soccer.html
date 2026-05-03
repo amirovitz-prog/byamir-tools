@@ -114,7 +114,7 @@ function norm(dx,dy){ const m=Math.hypot(dx,dy)||1; return [dx/m,dy/m]; }
 function resetPositions() {
   goalLock = false;
   player = { x: F.x+F.w*.25, y: F.y+F.h/2, vx:0, vy:0, speed:3.6, team:0 };
-  ball   = { x: F.x+F.w/2,   y: F.y+F.h/2, vx:0, vy:0 };
+  ball   = { x: F.x+F.w/2,   y: F.y+F.h/2, vx: (Math.random()-.5)*3, vy: (Math.random()-.5)*2 };
   aiPlayers = [
     {x:F.x+F.w*.64, y:F.y+F.h*.33, vx:0,vy:0, speed:2.7, team:1, role:'def'},
     {x:F.x+F.w*.64, y:F.y+F.h*.67, vx:0,vy:0, speed:2.7, team:1, role:'def'},
@@ -223,11 +223,16 @@ function updateAI(ai) {
       ball.vx = bx*7.5; ball.vy = by*7.5 + (Math.random()-.5)*3;
     }
   } else {
-    if (owner===1 || (!owner && ball.x > F.x+F.w*0.5)) {
-      tx = ball.x; ty = ball.y;
+    if (owner === 0) {
+      // Player has ball — defenders drop back, attackers press
+      if (ai.role === 'def') {
+        tx = GR.x-60; ty = GR.y+GH/2;
+      } else {
+        tx = ball.x; ty = ball.y;
+      }
     } else {
-      tx = ai.role==='def' ? GR.x-55 : F.x+F.w*.65;
-      ty = GR.y+GH/2;
+      // Nobody has ball or another AI has it — always chase
+      tx = ball.x; ty = ball.y;
     }
     const d = dist(ai,{x:tx,y:ty});
     const [dx,dy] = norm(tx-ai.x, ty-ai.y);
@@ -271,22 +276,24 @@ function update(dt) {
   if (dist(player, ball) < PR+BR) { ball.vx += player.vx*.35; ball.vy += player.vy*.35; }
   aiPlayers.forEach(a => { if (dist(a,ball) < PR+BR) { ball.vx += a.vx*.35; ball.vy += a.vy*.35; }});
 
-  // Wall bounces
-  if (ball.x-BR < F.x)       { ball.x=F.x+BR;        ball.vx*=-.7; }
-  if (ball.x+BR > F.x+F.w)   { ball.x=F.x+F.w-BR;    ball.vx*=-.7; }
-  const inGL = ball.y>GL.y && ball.y<GL.y+GH;
-  const inGR = ball.y>GR.y && ball.y<GR.y+GH;
-  if (ball.y-BR < F.y && !inGL && !inGR) { ball.y=F.y+BR;        ball.vy=Math.abs(ball.vy)*.7; }
-  if (ball.y+BR > F.y+F.h && !inGL && !inGR) { ball.y=F.y+F.h-BR; ball.vy=-Math.abs(ball.vy)*.7; }
+  // Determine if ball is in a goal's y-range BEFORE wall bounces
+  const inGL = ball.y > GL.y && ball.y < GL.y+GH;
+  const inGR = ball.y > GR.y && ball.y < GR.y+GH;
 
-  // Goal detection
+  // Wall bounces — skip left wall when ball is in left goal zone, skip right when in right goal zone
+  if (ball.x-BR < F.x     && !inGL) { ball.x=F.x+BR;       ball.vx*=-.7; }
+  if (ball.x+BR > F.x+F.w && !inGR) { ball.x=F.x+F.w-BR;   ball.vx*=-.7; }
+  if (ball.y-BR < F.y     && !inGL && !inGR) { ball.y=F.y+BR;       ball.vy= Math.abs(ball.vy)*.7; }
+  if (ball.y+BR > F.y+F.h && !inGL && !inGR) { ball.y=F.y+F.h-BR;   ball.vy=-Math.abs(ball.vy)*.7; }
+
+  // Goal detection — ball center crosses the goal line
   if (!goalLock) {
-    if (ball.x-BR < GL.x && inGL) {
+    if (ball.x < F.x && inGL) {
       goalLock = true; score[1]++; playGoalSound();
       showMsg('⚽  GOAL!  Away scores!');
       setTimeout(() => { resetPositions(); hideMsg(); }, 2200);
     }
-    if (ball.x+BR > GR.x+GW && inGR) {
+    if (ball.x > F.x+F.w && inGR) {
       goalLock = true; score[0]++; playGoalSound();
       showMsg('⚽  GOAL!  Home scores!');
       setTimeout(() => { resetPositions(); hideMsg(); }, 2200);
@@ -471,10 +478,20 @@ let msgText = '';
 function showMsg(t) { msgText = t; }
 function hideMsg()  { msgText = ''; }
 
+function roundRectPath(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y);   ctx.arcTo(x+w, y,   x+w, y+r,   r);
+  ctx.lineTo(x+w, y+h-r); ctx.arcTo(x+w, y+h, x+w-r, y+h, r);
+  ctx.lineTo(x+r, y+h);   ctx.arcTo(x,   y+h, x,   y+h-r, r);
+  ctx.lineTo(x,   y+r);   ctx.arcTo(x,   y,   x+r, y,     r);
+  ctx.closePath();
+}
+
 function drawMsg() {
   if (!msgText) return;
   ctx.fillStyle='rgba(0,0,0,0.78)';
-  ctx.beginPath(); ctx.roundRect(CW/2-200, CH/2-90, 400, 180, 16); ctx.fill();
+  roundRectPath(CW/2-200, CH/2-90, 400, 180, 16); ctx.fill();
   ctx.strokeStyle='#e94560'; ctx.lineWidth=2; ctx.stroke();
 
   ctx.fillStyle='white'; ctx.textAlign='center'; ctx.textBaseline='middle';
