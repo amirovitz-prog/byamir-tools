@@ -276,24 +276,27 @@ function update(dt) {
   if (dist(player, ball) < PR+BR) { ball.vx += player.vx*.35; ball.vy += player.vy*.35; }
   aiPlayers.forEach(a => { if (dist(a,ball) < PR+BR) { ball.vx += a.vx*.35; ball.vy += a.vy*.35; }});
 
-  // Determine if ball is in a goal's y-range BEFORE wall bounces
-  const inGL = ball.y > GL.y && ball.y < GL.y+GH;
-  const inGR = ball.y > GR.y && ball.y < GR.y+GH;
+  // Goal zone: ball must be near the goal mouth AND in the correct y-band
+  const inGoalYRange = ball.y > GL.y && ball.y < GL.y + GH; // same y for both goals
+  const nearLeftGoal  = ball.x < F.x + 60;
+  const nearRightGoal = ball.x > F.x + F.w - 60;
+  const inGL = nearLeftGoal  && inGoalYRange;
+  const inGR = nearRightGoal && inGoalYRange;
 
-  // Wall bounces — skip left wall when ball is in left goal zone, skip right when in right goal zone
-  if (ball.x-BR < F.x     && !inGL) { ball.x=F.x+BR;       ball.vx*=-.7; }
-  if (ball.x+BR > F.x+F.w && !inGR) { ball.x=F.x+F.w-BR;   ball.vx*=-.7; }
-  if (ball.y-BR < F.y     && !inGL && !inGR) { ball.y=F.y+BR;       ball.vy= Math.abs(ball.vy)*.7; }
-  if (ball.y+BR > F.y+F.h && !inGL && !inGR) { ball.y=F.y+F.h-BR;   ball.vy=-Math.abs(ball.vy)*.7; }
+  // Wall bounces — allow ball through goal mouth only when actually at that goal
+  if (ball.x - BR < F.x     && !inGL) { ball.x = F.x + BR;       ball.vx *= -.7; }
+  if (ball.x + BR > F.x+F.w && !inGR) { ball.x = F.x + F.w - BR; ball.vx *= -.7; }
+  if (ball.y - BR < F.y               ) { ball.y = F.y + BR;       ball.vy =  Math.abs(ball.vy) * .7; }
+  if (ball.y + BR > F.y + F.h         ) { ball.y = F.y + F.h - BR; ball.vy = -Math.abs(ball.vy) * .7; }
 
-  // Goal detection — ball center crosses the goal line
+  // Goal detection — ball exits through the goal opening
   if (!goalLock) {
-    if (ball.x < F.x && inGL) {
+    if (ball.x < F.x && inGoalYRange) {
       goalLock = true; score[1]++; playGoalSound();
       showMsg('⚽  GOAL!  Away scores!');
       setTimeout(() => { resetPositions(); hideMsg(); }, 2200);
     }
-    if (ball.x > F.x+F.w && inGR) {
+    if (ball.x > F.x + F.w && inGoalYRange) {
       goalLock = true; score[0]++; playGoalSound();
       showMsg('⚽  GOAL!  Home scores!');
       setTimeout(() => { resetPositions(); hideMsg(); }, 2200);
